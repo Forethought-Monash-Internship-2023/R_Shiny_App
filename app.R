@@ -18,12 +18,21 @@ library(wordcloud)
 library(igraph)
 library(DT)
 library(webr)
+library(readxl)
 
 ## Read data --------------------------------------
 IG_Telco_posts_clean <- read.csv("clean_data/Instagram/IG_Telco_posts.csv")
 IG_Telco_comments_clean <- read.csv("clean_data/Instagram/IG_Telco_comments.csv")
 FB_Telco_posts_clean <- read.csv("clean_data/Facebook/FB_Telco_posts.csv")
 FB_Telco_comments_clean <- read.csv("clean_data/Facebook/FB_Telco_comments.csv")
+FB_amaysim <- read_excel("result_for_histogram/Facebook/amaysim_fb_post_hist.xlsx")
+FB_optus <- read_excel("result_for_histogram/Facebook/optus_fb_post_hist.xlsx")
+FB_telstra <- read_excel("result_for_histogram/Facebook/telstra_fb_post_hist.xlsx")
+FB_vodafoneAU <- read_excel("result_for_histogram/Facebook/vodafoneAU_fb_post_hist.xlsx")
+IG_amaysim <- read_excel("result_for_histogram/Instagram/amaysim_ig_post_hist.xlsx")
+IG_optus <- read_excel("result_for_histogram/Instagram/optus_ig_post_hist.xlsx")
+IG_telstra <- read_excel("result_for_histogram/Instagram/telstra_ig_post_hist.xlsx")
+IG_vodafoneAU <- read_excel("result_for_histogram/Instagram/vodafoneAU_ig_post_hist.xlsx")
 
 ## Data Wangling -----------------------------------------
 FB_url <- FB_Telco_posts_clean %>% 
@@ -134,6 +143,26 @@ IG_comment_word <- IG_Telco_comments_clean %>%
   anti_join(stopword, by = "word") %>%
   filter(!str_detect(word, "^[[:digit:]]"))
 
+## FB themes
+data.frame(append(FB_amaysim, c(brand = "Amaysim"), after = 0)) -> FB_amaysim
+data.frame(append(FB_optus, c(brand = "Optus"), after = 0)) -> FB_optus
+data.frame(append(FB_telstra, c(brand = "Telstra"), after = 0)) -> FB_telstra
+data.frame(append(FB_vodafoneAU, c(brand = "Vodafone AU"), after = 0)) -> FB_vodafoneAU
+
+FB_col <- rbind(FB_amaysim, FB_optus, FB_telstra, FB_vodafoneAU) %>%
+  mutate(Themes = substr(Themes, 9, nchar(Themes)),
+         Themes = gsub("_", " ", Themes))
+
+## IG themes
+data.frame(append(IG_amaysim, c(brand = "Amaysim"), after = 0)) -> IG_amaysim
+data.frame(append(IG_optus, c(brand = "Optus"), after = 0)) -> IG_optus
+data.frame(append(IG_telstra, c(brand = "Telstra"), after = 0)) -> IG_telstra
+data.frame(append(IG_vodafoneAU, c(brand = "Vodafone AU"), after = 0)) -> IG_vodafoneAU
+
+IG_col <- rbind(IG_amaysim, IG_optus, IG_telstra, IG_vodafoneAU) %>%
+  mutate(Themes = substr(Themes, 9, nchar(Themes)),
+         Themes = gsub("_", " ", Themes))
+
 
 ## ui--------------------------------------------------
 
@@ -180,8 +209,8 @@ ui <- dashboardPage(
                   dateRangeInput(
                     inputId = "dateRanges",
                     label = NULL,
-                    start = "2022-01-01",
-                    end = "2023-01-31",
+                    start = "2020-03-04",
+                    end = "2023-08-15",
                     min = "2020-03-04",
                     max = "2023-08-15"
                     ),
@@ -202,19 +231,7 @@ ui <- dashboardPage(
                     ),
                   br()
                   ),
-                br(),
-                
-                menuItem(
-                  "Themes",
-                  icon = icon("file-contract"),
-                  checkboxGroupInput(
-                    inputId = "themeInput",
-                    label = NULL,
-                    choices = c("Network", "Family", "Plan"),
-                    selected = "Plan"
-                  ),
-                  br()
-                  )
+                br()
                 )
     ),
   
@@ -239,7 +256,11 @@ ui <- dashboardPage(
                                                 wordcloud2Output("word", height = "360px")),
                                             box(width = 6,
                                                 status = "primary",
-                                                plotOutput("sentiment", height = "360px")))
+                                                plotOutput("sentiment", height = "360px"))),
+                                   
+                                   fluidRow(box(width = 12,
+                                                status = "primary",
+                                                plotOutput("col", height = "400px")))
                                    ),
                           
                           tabPanel("Comment",
@@ -359,6 +380,23 @@ server = function(input, output) {
     })
   
   
+  col_data = reactive({
+    
+    if(input$dataSource == "Facebook"){
+      
+      FB_col %>% 
+        filter(brand %in% input$brandSelect)
+    } 
+    else{
+      
+      IG_col %>% 
+        filter(brand %in% input$brandSelect)
+      
+    }
+    
+  })
+  
+  
   # valuebox ------------------------------------------
   
   output$value1 = renderValueBox({
@@ -422,14 +460,16 @@ server = function(input, output) {
                  color = "black", linewidth = 0.7) +
       facet_wrap(~category, scales = "free") +
       labs(title = "Trend Analysis by Brand",
-           x = "Date Post",
+           x = NULL,
            y = "Magnitude",
            color = NULL) +
       scale_color_manual(values = c("Telstra" = "#0060AE", "Optus" = "#39A8AF", 
                                     "Vodafone AU" = "#ef2d1e", "Amaysim" = "#FF5500")) +
       theme_minimal() +
       theme(legend.position = "none",
-            plot.title = element_text(hjust = 0.5))
+            plot.title = element_text(hjust = 0.5),
+            axis.text.x = element_text(angle = 30,
+                                       vjust = 0.5))
     
   })
     
@@ -484,6 +524,29 @@ server = function(input, output) {
     
   })
 
+  
+  # column ----------------------------------
+  
+  output$col <- renderPlot({
+    
+    col_data() %>%
+      mutate(Themes = reorder_within(Themes, Count, brand)) %>%
+      ggplot(aes(x = Themes, y = Count, fill = brand)) +
+      geom_col(show.legend = F,
+               alpha = 0.7) +
+      coord_flip() +
+      facet_wrap(~ brand, scales = "free", nrow = 2) +
+      scale_fill_manual(values = c("#FF5500", "#39A8AF", 
+                                   "#0060AE", "#ef2d1e")) +
+      scale_x_reordered() +
+      labs(x = NULL,
+           y = NULL) +
+      theme_minimal() +
+      theme(legend.position = "none",
+            text = element_text(size = 16))
+    
+  })
+  
   
   # network ------------------------------------------
   
@@ -551,7 +614,7 @@ server = function(input, output) {
                           fill = 0) %>%
           comparison.cloud(colors = c("#c30101", "#01C301"),
                            max.words = 150, 
-                           title.size = 1,
+                           title.size = 2,
                            random.order = FALSE)
       }, height = 900),
       easyClose = T,
