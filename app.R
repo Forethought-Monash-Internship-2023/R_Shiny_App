@@ -84,7 +84,10 @@ IG_Telco_posts_clean <- IG_Telco_posts_clean_like_view %>%
 ## FB comments
 FB_Telco_comments_clean = FB_Telco_comments_clean %>% 
   inner_join(FB_url,by = "post_url") %>% 
-  mutate(date = as.Date(post_date)) %>% 
+  mutate(date = as.Date(post_date),
+         brand = case_when(brand == "Vodafone Australia" ~ "Vodafone AU",
+                           brand == "amaysim" ~ "Amaysim",
+                           .default = brand)) %>% 
   select(brand,date,content = comment_content)
 
 ## IG comments
@@ -92,7 +95,9 @@ IG_Telco_comments_clean <- IG_Telco_comments_clean %>%
   inner_join(IG_url,
              by = "post_url",
              relationship = "many-to-many") %>% 
-  mutate(date = as.Date(date)) %>% 
+  mutate(date = as.Date(date),
+         brand = case_when(brand == "amaysim" ~ "Amaysim",
+                           .default = brand)) %>% 
   select(brand, date, content)
 
 ## Stop words
@@ -567,7 +572,7 @@ server = function(input, output) {
       count(word1, word2, sort = T)
     
     Bigram_graph <- Com_bigrams %>%
-      top_n(50) %>%
+      top_n(40) %>%
       graph_from_data_frame()
     
     set.seed(2017)
@@ -596,10 +601,10 @@ server = function(input, output) {
                       value.var = "n",
                       fill = 0) %>%
       comparison.cloud(colors = c("#c30101", "#01C301"),
-                       max.words = 150, scale = c(3,.5),
+                       max.words = 150,
+                       scale = c(3,.5),
                        title.size = NULL,
                        random.order = FALSE)
-    
   })
   
   observeEvent((input$zoom), {
@@ -613,8 +618,9 @@ server = function(input, output) {
                           value.var = "n",
                           fill = 0) %>%
           comparison.cloud(colors = c("#c30101", "#01C301"),
-                           max.words = 150, 
-                           title.size = 2,
+                           max.words = 150,
+                           scale = c(3,.5),
+                           title.size = NULL,
                            random.order = FALSE)
       }, height = 900),
       easyClose = T,
